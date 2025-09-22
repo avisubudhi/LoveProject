@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Photo Slideshow</title>
+  <link rel="stylesheet" href="css/slideshow.css">
+</head>
+<body>
+  <div class="slideshow-container">
+    <div id="slideshow-image" class="slideshow-image"></div>
+    <div id="slideshow-text" class="slideshow-text"></div>
+
+    <!-- Navigation -->
+    <a class="prev" onclick="changeSlide(-1)">&#10094;</a>
+    <a class="next" onclick="changeSlide(1)">&#10095;</a>
+  </div>
+
+  <!-- Dots -->
+  <div class="dots-container" id="dots"></div>
+
+  <script src="js/slideshow.js"></script>
+</body>
+</html>
