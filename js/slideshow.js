@@ -1,9 +1,9 @@
 const slides = [
-  { image: "images/photo1.jpg", text: "Our first memory together ❤️" },
-  { image: "images/photo2.jpg", text: "That smile makes my day 😊" },
-  { image: "images/photo3.jpg", text: "Forever my adventure partner 🌍" },
-  { image: "images/photo4.jpg", text: "Cuteness overload 💕" },
-  { image: "images/photo5.jpg", text: "To endless moments together ✨" }
+  { image: "images/image1.jpeg", text: "Our first memory together ❤️" },
+  { image: "images/image2.jpeg", text: "That smile makes my day 😊" },
+  { image: "images/image3.jpeg", text: "Forever my adventure partner 🌍" },
+  { image: "images/image4.jpeg", text: "Cuteness overload 💕" },
+  { image: "images/image5.jpeg", text: "To endless moments together ✨" }
 ];
 
 let currentSlide = 0;
