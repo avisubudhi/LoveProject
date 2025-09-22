@@ -1,41 +1,48 @@
 const slides = [
   { image: "images/photo1.jpg", text: "Our first memory together ❤️" },
-  { image: "images/photo2.jpg", text: "This smile always makes my day 😊" },
-  { image: "images/photo3.jpg", text: "Forever my favorite adventure partner 🌍" },
+  { image: "images/photo2.jpg", text: "That smile makes my day 😊" },
+  { image: "images/photo3.jpg", text: "Forever my adventure partner 🌍" },
   { image: "images/photo4.jpg", text: "Cuteness overload 💕" },
-  { image: "images/photo5.jpg", text: "Here's to endless moments together ✨" }
+  { image: "images/photo5.jpg", text: "To endless moments together ✨" }
 ];
 
 let currentSlide = 0;
-let imgDiv, textDiv;
+let autoplayInterval;
+let container, textDiv, imgDivs = [];
 
-function showSlide(index) {
-  const slide = slides[index];
+function createSlides() {
+  container = document.getElementById("slideshow");
+  textDiv = document.getElementById("slideshow-text");
 
-  // Reset classes for fade animation
-  imgDiv.classList.remove("show");
-  textDiv.classList.remove("show");
+  slides.forEach((slide, i) => {
+    const div = document.createElement("div");
+    div.className = "slideshow-image";
+    div.style.backgroundImage = `url('${slide.image}')`;
+    container.appendChild(div);
+    imgDivs.push(div);
+  });
+}
 
-  setTimeout(() => {
-    imgDiv.style.backgroundImage = `url('${slide.image}')`;
-    textDiv.textContent = slide.text;
+function showSlide(index, direction = 1) {
+  imgDivs.forEach(div => div.className = "slideshow-image");
 
-    // Trigger fade-in
-    imgDiv.classList.add("show");
-    textDiv.classList.add("show");
-  }, 200);
+  let prevSlide = currentSlide;
+  currentSlide = (index + slides.length) % slides.length;
 
-  // Update dots
-  const dots = document.getElementsByClassName("dot");
-  for (let i = 0; i < dots.length; i++) {
-    dots[i].classList.remove("active");
+  if (direction === 1) {
+    imgDivs[prevSlide].classList.add("exit-left");
+  } else {
+    imgDivs[prevSlide].classList.add("exit-right");
   }
-  dots[index].classList.add("active");
+
+  imgDivs[currentSlide].classList.add("active");
+  textDiv.textContent = slides[currentSlide].text;
+
+  updateDots();
 }
 
 function changeSlide(n) {
-  currentSlide = (currentSlide + n + slides.length) % slides.length;
-  showSlide(currentSlide);
+  showSlide(currentSlide + n, n);
 }
 
 function setupDots() {
@@ -43,21 +50,45 @@ function setupDots() {
   slides.forEach((_, i) => {
     const dot = document.createElement("span");
     dot.className = "dot";
-    dot.addEventListener("click", () => {
-      currentSlide = i;
-      showSlide(currentSlide);
-    });
+    dot.addEventListener("click", () => showSlide(i, i > currentSlide ? 1 : -1));
     dotsContainer.appendChild(dot);
   });
 }
 
+function updateDots() {
+  const dots = document.getElementsByClassName("dot");
+  for (let i = 0; i < dots.length; i++) {
+    dots[i].classList.remove("active-dot");
+  }
+  dots[currentSlide].classList.add("active-dot");
+}
+
+function startAutoplay() {
+  autoplayInterval = setInterval(() => changeSlide(1), 4000);
+}
+
+function stopAutoplay() {
+  clearInterval(autoplayInterval);
+}
+
 window.onload = () => {
-  imgDiv = document.getElementById("slideshow-image");
-  textDiv = document.getElementById("slideshow-text");
-
+  createSlides();
   setupDots();
-  showSlide(currentSlide);
+  showSlide(0);
 
-  // Optional auto-play
-  // setInterval(() => changeSlide(1), 5000);
+  startAutoplay();
+
+  // Swipe support for touch
+  let startX = 0;
+  container.addEventListener("touchstart", e => {
+    stopAutoplay();
+    startX = e.touches[0].clientX;
+  });
+
+  container.addEventListener("touchend", e => {
+    let endX = e.changedTouches[0].clientX;
+    if (endX - startX > 50) changeSlide(-1); // swipe right
+    else if (startX - endX > 50) changeSlide(1); // swipe left
+    startAutoplay();
+  });
 };
