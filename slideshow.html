@@ -3,16 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <title>Photo Slideshow</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="css/slideshow.css">
 </head>
 <body>
-  <div class="slideshow-container">
+  <div class="slideshow-container" id="slideshow">
     <div id="slideshow-image" class="slideshow-image"></div>
     <div id="slideshow-text" class="slideshow-text"></div>
 
-    <!-- Navigation -->
-    <a class="prev" onclick="changeSlide(-1)">&#10094;</a>
-    <a class="next" onclick="changeSlide(1)">&#10095;</a>
+    <!-- Tap areas for navigation -->
+    <div class="tap-area left" onclick="changeSlide(-1)"></div>
+    <div class="tap-area right" onclick="changeSlide(1)"></div>
   </div>
 
   <!-- Dots -->
