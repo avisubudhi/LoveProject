@@ -7,10 +7,6 @@
   <link rel="stylesheet" href="css/deck.css">
 </head>
 <body>
-  <audio id="bg-music" loop>
-    <source src="music.mp3" type="audio/mpeg">
-  </audio>
-
   <div class="deck" id="deck"></div>
 
   <div class="modal" id="modal" aria-hidden="true" role="dialog">
@@ -20,7 +16,6 @@
 
   <script src="js/deck.js"></script>
   <script>
-    // Optional: close modal on overlay click or Escape
     (function () {
       const modal = document.getElementById("modal");
       const closeBtn = document.getElementById("modal-close");
