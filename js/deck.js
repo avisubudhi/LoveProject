@@ -19,8 +19,10 @@
     return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${maxWidth}`;
   }
 
-  function driveVideoPreviewSrc(fileId) {
-    return `https://drive.google.com/file/d/${fileId}/preview`;
+  function driveVideoPreviewSrc(fileId, { autoplay = false } = {}) {
+    // Use Drive preview iframe; can request autoplay & mute
+    const base = `https://drive.google.com/file/d/${fileId}/preview`;
+    return autoplay ? `${base}?autoplay=1&mute=1` : base;
   }
 
   // --- your links (share links are OK) ---
@@ -77,7 +79,7 @@
 
     videoShareLinks.forEach((link) => {
       const id = extractDriveId(link);
-      if (id) items.push({ type: "video", src: driveVideoPreviewSrc(id) });
+      if (id) items.push({ type: "video", src: driveVideoPreviewSrc(id, { autoplay: true }) });
     });
 
     // Randomize order without external shuffle
@@ -91,9 +93,20 @@
   const modalContent = document.getElementById("modal-content");
 
   let cards = [];
-  let isSpreading = false;
+  let mode = "free"; // "free" | "stack"
   let hoveredCard = null;
-  let animationFrame = null;
+
+  // stack state
+  let pointerActive = false;
+  let stackCenterX = 0;
+  let stackCenterY = 0;
+  let stackIndex = 0; // float index into cards
+  let stackBaseIndex = 0;
+  let lastPointerX = 0;
+  let lastPointerY = 0;
+  const STACK_SPACING_Y = 70;   // vertical distance between stacked cards (px)
+  const STACK_SPACING_X = 18;   // slight horizontal offset (px)
+  const STACK_SCALE_FOCUS = 1.1;
 
   // --- create scattered deck ---
   function createDeck() {
@@ -121,32 +134,15 @@
         img.onerror = () => console.warn("Image failed:", img.src);
         card.appendChild(img);
       } else if (file.type === "video") {
-        // Use video element for autoplay instead of iframe
-        const video = document.createElement("video");
-        video.src = file.src.replace('/preview', ''); // Remove preview for direct video
-        video.muted = true;
-        video.loop = true;
-        video.autoplay = true;
-        video.playsInline = true;
-        video.controls = false;
-        video.style.width = "100%";
-        video.style.height = "100%";
-        video.style.objectFit = "cover";
-        
-        // Try to play the video
-        video.play().catch(() => {
-          // If autoplay fails, fallback to iframe
-          const iframe = document.createElement("iframe");
-          iframe.src = file.src;
-          iframe.allow = "autoplay; encrypted-media";
-          iframe.allowFullscreen = true;
-          iframe.frameBorder = "0";
-          iframe.style.width = "100%";
-          iframe.style.height = "100%";
-          card.replaceChild(iframe, video);
-        });
-        
-        card.appendChild(video);
+        // Use Drive preview iframe with autoplay in-card
+        const iframe = document.createElement("iframe");
+        iframe.src = file.src; // already includes autoplay=1&mute=1
+        iframe.allow = "autoplay; encrypted-media";
+        iframe.allowFullscreen = true;
+        iframe.frameBorder = "0";
+        iframe.style.width = "100%";
+        iframe.style.height = "100%";
+        card.appendChild(iframe);
       }
 
       const topPct = Math.random() * 60 + 20;
@@ -164,142 +160,144 @@
       card.dataset.fileType = file.type;
       card.dataset.fileSrc = file.src;
 
-      // Add hover/touch interactions with throttling
-      let hoverTimeout;
-      card.addEventListener("mouseenter", () => {
-        clearTimeout(hoverTimeout);
-        hoverTimeout = setTimeout(() => handleCardHover(card, true), 50);
+      // Click opens modal (both image and video)
+      card.addEventListener("click", (e) => {
+        if (mode === "stack") return; // click is handled on release in stack mode
+        e.preventDefault();
+        e.stopPropagation();
+        openModal({ type: file.type, src: file.src });
       });
-      
-      card.addEventListener("mouseleave", () => {
-        clearTimeout(hoverTimeout);
-        hoverTimeout = setTimeout(() => handleCardHover(card, false), 100);
-      });
-      
-      card.addEventListener("touchstart", (e) => handleCardTouch(card, e), { passive: true });
-      card.addEventListener("click", (e) => handleCardClick(card, e));
 
       deck.appendChild(card);
       cards.push(card);
     });
   }
 
-  // --- handle card hover/touch ---
-  function handleCardHover(card, isEntering) {
-    if (isEntering) {
-      hoveredCard = card;
-      spreadCards(card);
-    } else {
-      hoveredCard = null;
-      resetCards();
+  // --- STACK MODE LAYOUT ---
+  function layoutStack() {
+    const deckRect = deck.getBoundingClientRect();
+    const centerX = stackCenterX - deckRect.left;
+    const centerY = stackCenterY - deckRect.top;
+
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i];
+      const rect = card.getBoundingClientRect();
+      const midX = rect.left - deckRect.left + rect.width / 2;
+      const midY = rect.top - deckRect.top + rect.height / 2;
+
+      const offset = i - stackIndex; // float; 0 means focused
+      const spreadX = STACK_SPACING_X * offset;
+      const spreadY = STACK_SPACING_Y * offset;
+
+      const dx = centerX - midX + spreadX;
+      const dy = centerY - midY + spreadY;
+
+      const scale = i === Math.round(stackIndex) ? STACK_SCALE_FOCUS : 1.0;
+      const rotate = 0;
+
+      card.style.zIndex = String(1000 - Math.abs(Math.round(offset)));
+      card.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(${scale}) rotate(${rotate}deg)`;
     }
   }
 
-  function handleCardTouch(card, e) {
-    e.preventDefault();
-    if (hoveredCard === card) {
-      hoveredCard = null;
-      resetCards();
-    } else {
-      hoveredCard = card;
-      spreadCards(card);
+  function resetToFreeLayout() {
+    for (const card of cards) {
+      const baseRotate = parseFloat(card.dataset.baseRotate || "0");
+      card.style.transform = `rotate(${baseRotate}deg)`;
+      card.style.zIndex = "1";
     }
   }
 
-  function handleCardClick(card, e) {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const fileType = card.dataset.fileType;
-    const fileSrc = card.dataset.fileSrc;
-    
-    // Auto-open videos in modal
-    openModal({ type: fileType, src: fileSrc });
-  }
+  // --- POINTER EVENTS (mouse + touch unified) ---
+  deck.addEventListener("pointerdown", (e) => {
+    pointerActive = true;
+    mode = "stack";
+    deck.setPointerCapture(e.pointerId);
 
-  // --- smooth spread cards animation ---
-  function spreadCards(centerCard) {
-    if (isSpreading) return;
-    isSpreading = true;
+    lastPointerX = e.clientX;
+    lastPointerY = e.clientY;
+    stackCenterX = e.clientX;
+    stackCenterY = e.clientY;
 
-    const centerIndex = parseInt(centerCard.dataset.index);
-    const centerRect = centerCard.getBoundingClientRect();
-    const centerX = centerRect.left + centerRect.width / 2;
-    const centerY = centerRect.top + centerRect.height / 2;
+    // pick nearest card to pointer as starting focus
+    const nearestIndex = findNearestCardIndex(e.clientX, e.clientY);
+    stackIndex = nearestIndex;
+    stackBaseIndex = nearestIndex;
 
-    // Use requestAnimationFrame for smooth animation
-    function animateSpread() {
-      cards.forEach((card, index) => {
-        if (card === centerCard) {
-          card.style.zIndex = "100";
-          card.style.transform += " scale(1.05)";
-          return;
-        }
+    layoutStack();
+  }, { passive: false });
 
-        const cardRect = card.getBoundingClientRect();
-        const cardX = cardRect.left + cardRect.width / 2;
-        const cardY = cardRect.top + cardRect.height / 2;
+  deck.addEventListener("pointermove", (e) => {
+    if (!pointerActive || mode !== "stack") return;
 
-        const dx = cardX - centerX;
-        const dy = cardY - centerY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+    const dx = e.clientX - lastPointerX;
+    const dy = e.clientY - lastPointerY;
 
-        const spreadFactor = Math.min(distance / 300, 1.5);
-        const angle = Math.atan2(dy, dx);
-        
-        const spreadX = Math.cos(angle) * spreadFactor * 40;
-        const spreadY = Math.sin(angle) * spreadFactor * 40;
+    // move stack center with pointer
+    stackCenterX += dx;
+    stackCenterY += dy;
 
-        const baseRotate = parseFloat(card.dataset.baseRotate || "0");
-        const baseTop = parseFloat(card.dataset.baseTop || "50");
-        const baseLeft = parseFloat(card.dataset.baseLeft || "50");
+    // vertical movement changes focused index
+    stackIndex -= dy / STACK_SPACING_Y; // dragging up (negative dy) moves to next cards
+    stackIndex = Math.max(0, Math.min(cards.length - 1, stackIndex));
 
-        card.style.top = `${baseTop + spreadY / 15}%`;
-        card.style.left = `${baseLeft + spreadX / 15}%`;
-        card.style.transform = `translate(${spreadX}px, ${spreadY}px) rotate(${baseRotate + spreadFactor * 5}deg)`;
-        card.style.zIndex = "10";
-      });
+    lastPointerX = e.clientX;
+    lastPointerY = e.clientY;
+
+    layoutStack();
+  }, { passive: false });
+
+  deck.addEventListener("pointerup", () => {
+    if (!pointerActive) return;
+    pointerActive = false;
+
+    // Snap to nearest and open
+    const focus = Math.round(stackIndex);
+    const card = cards[focus];
+    if (card) {
+      openModal({ type: card.dataset.fileType, src: card.dataset.fileSrc });
     }
 
-    animateSpread();
+    mode = "free";
+    resetToFreeLayout();
+  });
+
+  deck.addEventListener("pointercancel", () => {
+    if (!pointerActive) return;
+    pointerActive = false;
+    mode = "free";
+    resetToFreeLayout();
+  });
+
+  function findNearestCardIndex(clientX, clientY) {
+    const deckRect = deck.getBoundingClientRect();
+    let nearest = 0;
+    let best = Infinity;
+    cards.forEach((c, i) => {
+      const r = c.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const d = Math.hypot(cx - clientX, cy - clientY);
+      if (d < best) {
+        best = d;
+        nearest = i;
+      }
+    });
+    return nearest;
   }
 
-  // --- smooth reset cards animation ---
-  function resetCards() {
-    if (!isSpreading) return;
-    isSpreading = false;
-
-    // Use requestAnimationFrame for smooth reset
-    function animateReset() {
-      cards.forEach((card) => {
-        const baseRotate = parseFloat(card.dataset.baseRotate || "0");
-        const baseTop = parseFloat(card.dataset.baseTop || "50");
-        const baseLeft = parseFloat(card.dataset.baseLeft || "50");
-
-        card.style.top = `${baseTop}%`;
-        card.style.left = `${baseLeft}%`;
-        card.style.transform = `rotate(${baseRotate}deg)`;
-        card.style.zIndex = "1";
-      });
-    }
-
-    animateReset();
-  }
-
-  // --- smooth parallax follow mouse ---
+  // --- PARALLAX when not in stack mode ---
   let mouseX = 0, mouseY = 0;
   let targetX = 0, targetY = 0;
 
   document.addEventListener("mousemove", (e) => {
-    if (!cards.length || isSpreading) return;
-    
+    if (!cards.length || mode !== "free") return;
     targetX = (e.clientX / window.innerWidth - 0.5) * 30;
     targetY = (e.clientY / window.innerHeight - 0.5) * 30;
   });
 
-  // Smooth parallax animation loop
   function animateParallax() {
-    if (!isSpreading && cards.length) {
+    if (mode === "free" && cards.length) {
       mouseX += (targetX - mouseX) * 0.1;
       mouseY += (targetY - mouseY) * 0.1;
 
@@ -308,11 +306,8 @@
         card.style.transform = `translate(${mouseX}px, ${mouseY}px) rotate(${base}deg)`;
       });
     }
-    
-    animationFrame = requestAnimationFrame(animateParallax);
+    requestAnimationFrame(animateParallax);
   }
-
-  // Start animation loop
   animateParallax();
 
   // --- modal ---
@@ -328,7 +323,10 @@
       modalContent.appendChild(img);
     } else if (file.type === "video") {
       const iframe = document.createElement("iframe");
-      iframe.src = file.src;
+      // Ensure autoplay in modal as well
+      iframe.src = file.src.includes("autoplay=1")
+        ? file.src
+        : `${file.src}${file.src.includes("?") ? "&" : "?"}autoplay=1&mute=1`;
       iframe.allow = "autoplay; encrypted-media";
       iframe.allowFullscreen = true;
       iframe.frameBorder = "0";
@@ -349,13 +347,6 @@
   }
 
   window.closeModal = closeModal;
-
-  // Cleanup on page unload
-  window.addEventListener("beforeunload", () => {
-    if (animationFrame) {
-      cancelAnimationFrame(animationFrame);
-    }
-  });
 
   // init
   createDeck();
