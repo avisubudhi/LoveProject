@@ -93,6 +93,7 @@
   let cards = [];
   let isSpreading = false;
   let hoveredCard = null;
+  let animationFrame = null;
 
   // --- create scattered deck ---
   function createDeck() {
@@ -120,14 +121,32 @@
         img.onerror = () => console.warn("Image failed:", img.src);
         card.appendChild(img);
       } else if (file.type === "video") {
-        const iframe = document.createElement("iframe");
-        iframe.src = file.src;
-        iframe.allow = "autoplay; encrypted-media";
-        iframe.allowFullscreen = true;
-        iframe.frameBorder = "0";
-        iframe.style.width = "100%";
-        iframe.style.height = "100%";
-        card.appendChild(iframe);
+        // Use video element for autoplay instead of iframe
+        const video = document.createElement("video");
+        video.src = file.src.replace('/preview', ''); // Remove preview for direct video
+        video.muted = true;
+        video.loop = true;
+        video.autoplay = true;
+        video.playsInline = true;
+        video.controls = false;
+        video.style.width = "100%";
+        video.style.height = "100%";
+        video.style.objectFit = "cover";
+        
+        // Try to play the video
+        video.play().catch(() => {
+          // If autoplay fails, fallback to iframe
+          const iframe = document.createElement("iframe");
+          iframe.src = file.src;
+          iframe.allow = "autoplay; encrypted-media";
+          iframe.allowFullscreen = true;
+          iframe.frameBorder = "0";
+          iframe.style.width = "100%";
+          iframe.style.height = "100%";
+          card.replaceChild(iframe, video);
+        });
+        
+        card.appendChild(video);
       }
 
       const topPct = Math.random() * 60 + 20;
@@ -145,9 +164,18 @@
       card.dataset.fileType = file.type;
       card.dataset.fileSrc = file.src;
 
-      // Add hover/touch interactions
-      card.addEventListener("mouseenter", () => handleCardHover(card, true));
-      card.addEventListener("mouseleave", () => handleCardHover(card, false));
+      // Add hover/touch interactions with throttling
+      let hoverTimeout;
+      card.addEventListener("mouseenter", () => {
+        clearTimeout(hoverTimeout);
+        hoverTimeout = setTimeout(() => handleCardHover(card, true), 50);
+      });
+      
+      card.addEventListener("mouseleave", () => {
+        clearTimeout(hoverTimeout);
+        hoverTimeout = setTimeout(() => handleCardHover(card, false), 100);
+      });
+      
       card.addEventListener("touchstart", (e) => handleCardTouch(card, e), { passive: true });
       card.addEventListener("click", (e) => handleCardClick(card, e));
 
@@ -185,16 +213,11 @@
     const fileType = card.dataset.fileType;
     const fileSrc = card.dataset.fileSrc;
     
-    if (fileType === "video") {
-      // Auto-open videos in modal
-      openModal({ type: fileType, src: fileSrc });
-    } else {
-      // Regular click for images
-      openModal({ type: fileType, src: fileSrc });
-    }
+    // Auto-open videos in modal
+    openModal({ type: fileType, src: fileSrc });
   }
 
-  // --- spread cards to reveal hidden ones ---
+  // --- smooth spread cards animation ---
   function spreadCards(centerCard) {
     if (isSpreading) return;
     isSpreading = true;
@@ -204,69 +227,93 @@
     const centerX = centerRect.left + centerRect.width / 2;
     const centerY = centerRect.top + centerRect.height / 2;
 
-    cards.forEach((card, index) => {
-      if (card === centerCard) {
-        // Bring hovered card to front
-        card.style.zIndex = "100";
-        card.style.transform += " scale(1.1)";
-        return;
-      }
+    // Use requestAnimationFrame for smooth animation
+    function animateSpread() {
+      cards.forEach((card, index) => {
+        if (card === centerCard) {
+          card.style.zIndex = "100";
+          card.style.transform += " scale(1.05)";
+          return;
+        }
 
-      const cardRect = card.getBoundingClientRect();
-      const cardX = cardRect.left + cardRect.width / 2;
-      const cardY = cardRect.top + cardRect.height / 2;
+        const cardRect = card.getBoundingClientRect();
+        const cardX = cardRect.left + cardRect.width / 2;
+        const cardY = cardRect.top + cardRect.height / 2;
 
-      // Calculate distance from center
-      const dx = cardX - centerX;
-      const dy = cardY - centerY;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+        const dx = cardX - centerX;
+        const dy = cardY - centerY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
 
-      // Spread cards based on distance
-      const spreadFactor = Math.min(distance / 200, 2); // Max 2x spread
-      const angle = Math.atan2(dy, dx);
-      
-      const spreadX = Math.cos(angle) * spreadFactor * 50;
-      const spreadY = Math.sin(angle) * spreadFactor * 50;
+        const spreadFactor = Math.min(distance / 300, 1.5);
+        const angle = Math.atan2(dy, dx);
+        
+        const spreadX = Math.cos(angle) * spreadFactor * 40;
+        const spreadY = Math.sin(angle) * spreadFactor * 40;
 
-      const baseRotate = parseFloat(card.dataset.baseRotate || "0");
-      const baseTop = parseFloat(card.dataset.baseTop || "50");
-      const baseLeft = parseFloat(card.dataset.baseLeft || "50");
+        const baseRotate = parseFloat(card.dataset.baseRotate || "0");
+        const baseTop = parseFloat(card.dataset.baseTop || "50");
+        const baseLeft = parseFloat(card.dataset.baseLeft || "50");
 
-      card.style.top = `${baseTop + spreadY / 10}%`;
-      card.style.left = `${baseLeft + spreadX / 10}%`;
-      card.style.transform = `translate(${spreadX}px, ${spreadY}px) rotate(${baseRotate + spreadFactor * 10}deg)`;
-      card.style.zIndex = "10";
-    });
+        card.style.top = `${baseTop + spreadY / 15}%`;
+        card.style.left = `${baseLeft + spreadX / 15}%`;
+        card.style.transform = `translate(${spreadX}px, ${spreadY}px) rotate(${baseRotate + spreadFactor * 5}deg)`;
+        card.style.zIndex = "10";
+      });
+    }
+
+    animateSpread();
   }
 
-  // --- reset cards to original positions ---
+  // --- smooth reset cards animation ---
   function resetCards() {
     if (!isSpreading) return;
     isSpreading = false;
 
-    cards.forEach((card) => {
-      const baseRotate = parseFloat(card.dataset.baseRotate || "0");
-      const baseTop = parseFloat(card.dataset.baseTop || "50");
-      const baseLeft = parseFloat(card.dataset.baseLeft || "50");
+    // Use requestAnimationFrame for smooth reset
+    function animateReset() {
+      cards.forEach((card) => {
+        const baseRotate = parseFloat(card.dataset.baseRotate || "0");
+        const baseTop = parseFloat(card.dataset.baseTop || "50");
+        const baseLeft = parseFloat(card.dataset.baseLeft || "50");
 
-      card.style.top = `${baseTop}%`;
-      card.style.left = `${baseLeft}%`;
-      card.style.transform = `rotate(${baseRotate}deg)`;
-      card.style.zIndex = "1";
-    });
+        card.style.top = `${baseTop}%`;
+        card.style.left = `${baseLeft}%`;
+        card.style.transform = `rotate(${baseRotate}deg)`;
+        card.style.zIndex = "1";
+      });
+    }
+
+    animateReset();
   }
 
-  // --- parallax follow mouse ---
+  // --- smooth parallax follow mouse ---
+  let mouseX = 0, mouseY = 0;
+  let targetX = 0, targetY = 0;
+
   document.addEventListener("mousemove", (e) => {
     if (!cards.length || isSpreading) return;
-    const x = (e.clientX / window.innerWidth - 0.5) * 40;
-    const y = (e.clientY / window.innerHeight - 0.5) * 40;
-
-    cards.forEach((card) => {
-      const base = parseFloat(card.dataset.baseRotate || "0");
-      card.style.transform = `translate(${x}px, ${y}px) rotate(${base}deg)`;
-    });
+    
+    targetX = (e.clientX / window.innerWidth - 0.5) * 30;
+    targetY = (e.clientY / window.innerHeight - 0.5) * 30;
   });
+
+  // Smooth parallax animation loop
+  function animateParallax() {
+    if (!isSpreading && cards.length) {
+      mouseX += (targetX - mouseX) * 0.1;
+      mouseY += (targetY - mouseY) * 0.1;
+
+      cards.forEach((card) => {
+        const base = parseFloat(card.dataset.baseRotate || "0");
+        card.style.transform = `translate(${mouseX}px, ${mouseY}px) rotate(${base}deg)`;
+      });
+    }
+    
+    animationFrame = requestAnimationFrame(animateParallax);
+  }
+
+  // Start animation loop
+  animateParallax();
 
   // --- modal ---
   function openModal(file) {
@@ -302,6 +349,13 @@
   }
 
   window.closeModal = closeModal;
+
+  // Cleanup on page unload
+  window.addEventListener("beforeunload", () => {
+    if (animationFrame) {
+      cancelAnimationFrame(animationFrame);
+    }
+  });
 
   // init
   createDeck();
