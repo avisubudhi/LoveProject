@@ -1,9 +1,13 @@
 const slides = [
-  { image: "images/image1.jpeg", text: "Our first memory together ❤️" },
-  { image: "images/image2.jpeg", text: "That smile makes my day 😊" },
-  { image: "images/image3.jpeg", text: "Forever my adventure partner 🌍" },
-  { image: "images/image4.jpeg", text: "Cuteness overload 💕" },
-  { image: "images/image5.jpeg", text: "To endless moments together ✨" }
+  // { image: "images/image1.jpeg", text: "Our first memory together ❤️" },
+  // { image: "images/image2.jpeg", text: "That smile makes my day 😊" },
+  // { image: "images/image3.jpeg", text: "Forever my adventure partner 🌍" },
+  // { image: "images/image4.jpeg", text: "Cuteness overload 💕" },
+  // { image: "images/image5.jpeg", text: "To endless moments together ✨" }
+  { type: "image", src: "https://drive.google.com/uc?export=download&id=1C049k5kcf4zBduu0m9fapzqBhn1zB9pi" },
+  { type: "image", src: "https://drive.google.com/uc?export=download&id=14YiLLonqtZ5yQu6emurYOrp-tmN9uJez" },
+  { type: "video", src: "https://drive.google.com/uc?export=download&id=1hOg2jhHQCXX5WF2amSfn8XxKgQRRIi_Z" },
+  { type: "video", src: "https://drive.google.com/uc?export=download&id=11izrM0HQFaOqW07XbQF9SnL5RNvgRQMo" }
 ];
 
 let currentSlide = 0;
