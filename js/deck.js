@@ -290,7 +290,7 @@
     if (mode === "stack") {
       stackCenterX += dx;
       stackCenterY += dy;
-      stackIndex -= dy / (STACK_SPACING_Y * 0.3); // 3x faster scrolling
+      stackIndex -= dy / (STACK_SPACING_Y * 0.1); // 3x faster scrolling
       stackIndex = Math.max(0, Math.min(cards.length - 1, stackIndex));
       layoutStack();
     }
