@@ -107,7 +107,7 @@
   const STACK_SCALE_FOCUS = 1.12;
 
   // Faster vertical scrolling through stack
-  const STACK_SCROLL_SPEED = 50; // increase for faster (try 2.0–3.0)
+  const STACK_SCROLL_SPEED = 25; // increase for faster (try 2.0–3.0)
 
   // Long-press / tap detection
   const LONG_PRESS_MS = 400;
