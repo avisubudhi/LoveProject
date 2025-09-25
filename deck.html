@@ -1,23 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Deck of Memories</title>
-  <link rel="stylesheet" href="css/deck.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parallax Media Deck</title>
+  <link rel="stylesheet" href="css/deck.css" />
 </head>
 <body>
-  <audio id="bg-music" loop>
-    <source src="music.mp3" type="audio/mpeg">
+  <div class="deck"></div>
+
+  <!-- Background music -->
+  <audio id="bg-music" autoplay loop>
+    <source src="https://www.bensound.com/bensound-music/bensound-sunny.mp3" type="audio/mpeg">
   </audio>
-
-  <div class="deck" id="deck"></div>
-
-  <!-- fullscreen modal -->
-  <div class="modal" id="modal">
-    <span class="close" onclick="closeModal()">&times;</span>
-    <div class="modal-content" id="modal-content"></div>
-  </div>
 
   <script src="js/deck.js"></script>
 </body>
