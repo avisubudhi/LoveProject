@@ -106,8 +106,8 @@
   const STACK_SPACING_X = 22;
   const STACK_SCALE_FOCUS = 1.12;
 
-  // Faster vertical scrolling through stack
-  const STACK_SCROLL_SPEED = 25; // increase for faster (try 2.0–3.0)
+  // Much faster vertical scrolling through stack
+  const STACK_SCROLL_SPEED = 20;
 
   // Long-press / tap detection
   const LONG_PRESS_MS = 400;
@@ -172,8 +172,9 @@
         card.dataset.fileSrc = file.preview;
       }
 
-      const topPct = Math.random() * 60 + 20;
-      const leftPct = Math.random() * 60 + 20;
+      // Center the deck by adjusting the random positioning
+      const topPct = Math.random() * 50 + 25;  // 25% - 75% (more centered)
+      const leftPct = Math.random() * 50 + 25; // 25% - 75% (more centered)
       const rotateDeg = (Math.random() - 0.5) * 30;
 
       card.style.top = `${topPct}%`;
