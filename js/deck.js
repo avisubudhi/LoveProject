@@ -1,6 +1,6 @@
 // Wrap to avoid global leaks and ensure order
 (function () {
-  // --- extract Google Drive file id ---
+  // ---------- Drive helpers ----------
   function extractDriveId(input) {
     if (!input) return null;
     const match = String(input).match(/\/d\/([^/]+)(?:\/|$)/);
@@ -14,18 +14,23 @@
     return null;
   }
 
-  // --- build Drive-safe URLs ---
+  // Image for <img> (fast, reliable)
   function driveImageSrc(fileId, maxWidth = 2000) {
     return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${maxWidth}`;
   }
 
+  // Video preview for modal (<iframe>)
   function driveVideoPreviewSrc(fileId, { autoplay = false } = {}) {
-    // Use Drive preview iframe; can request autoplay & mute
     const base = `https://drive.google.com/file/d/${fileId}/preview`;
     return autoplay ? `${base}?autoplay=1&mute=1` : base;
   }
 
-  // --- your links (share links are OK) ---
+  // Use thumbnail also for video card (prevents spinner)
+  function driveVideoThumbSrc(fileId, maxWidth = 2000) {
+    return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${maxWidth}`;
+  }
+
+  // ---------- Data ----------
   const imageShareLinks = [
     "https://drive.google.com/file/d/1_h1CQii6k7s2ZJkyb0muXryNaubJg6lJ/view?usp=sharing",
     "https://drive.google.com/file/d/1VpG8z5Bp6bZxQvgaJ44AeV9QI4hviGrl/view?usp=drive_link",
@@ -68,7 +73,6 @@
     "https://drive.google.com/file/d/1OVAvBaegL_0a18ubpakv37sSsTPdudXM/view?usp=drive_link"
   ];
 
-  // --- normalize into files[] (no shuffle function used) ---
   function buildFiles() {
     const items = [];
 
@@ -79,40 +83,56 @@
 
     videoShareLinks.forEach((link) => {
       const id = extractDriveId(link);
-      if (id) items.push({ type: "video", src: driveVideoPreviewSrc(id, { autoplay: true }) });
+      if (id) {
+        items.push({
+          type: "video",
+          thumb: driveVideoThumbSrc(id),
+          preview: driveVideoPreviewSrc(id, { autoplay: true })
+        });
+      }
     });
 
-    // Randomize order without external shuffle
     items.sort(() => Math.random() - 0.5);
     return items;
   }
 
-  // --- DOM refs ---
+  // ---------- DOM ----------
   const deck = document.getElementById("deck") || document.querySelector(".deck");
   const modal = document.getElementById("modal");
   const modalContent = document.getElementById("modal-content");
 
   let cards = [];
   let mode = "free"; // "free" | "stack"
-  let hoveredCard = null;
 
-  // stack state
+  // Stack state
   let pointerActive = false;
   let stackCenterX = 0;
   let stackCenterY = 0;
-  let stackIndex = 0; // float index into cards
-  let stackBaseIndex = 0;
+  let stackIndex = 0;
   let lastPointerX = 0;
   let lastPointerY = 0;
-  const STACK_SPACING_Y = 70;   // vertical distance between stacked cards (px)
-  const STACK_SPACING_X = 18;   // slight horizontal offset (px)
-  const STACK_SCALE_FOCUS = 1.1;
 
-  // --- create scattered deck ---
+  const STACK_SPACING_Y = 90;  // increase spread
+  const STACK_SPACING_X = 22;
+  const STACK_SCALE_FOCUS = 1.12;
+
+  // Long-press tap detection
+  const LONG_PRESS_MS = 400;
+  const TAP_MAX_DURATION_MS = 250;
+  const TAP_MOVE_TOLERANCE = 10;
+
+  let touchActive = false;
+  let touchStartTime = 0;
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let lastTouchX = 0;
+  let lastTouchY = 0;
+  let longPressTimer = null;
+  let longPressTriggered = false;
+
+  // ---------- Create deck ----------
   function createDeck() {
     const files = buildFiles();
-    console.log("Built files:", files.length);
-
     if (!files.length) {
       const msg = document.createElement("div");
       msg.style.color = "#fff";
@@ -131,18 +151,24 @@
         img.src = file.src;
         img.loading = "lazy";
         img.referrerPolicy = "no-referrer";
-        img.onerror = () => console.warn("Image failed:", img.src);
         card.appendChild(img);
+        card.dataset.fileType = "image";
+        card.dataset.fileSrc = file.src;
       } else if (file.type === "video") {
-        // Use Drive preview iframe with autoplay in-card
-        const iframe = document.createElement("iframe");
-        iframe.src = file.src; // already includes autoplay=1&mute=1
-        iframe.allow = "autoplay; encrypted-media";
-        iframe.allowFullscreen = true;
-        iframe.frameBorder = "0";
-        iframe.style.width = "100%";
-        iframe.style.height = "100%";
-        card.appendChild(iframe);
+        // Show fast thumbnail with play badge; modal will load autoplaying preview iframe
+        const thumb = document.createElement("img");
+        thumb.src = file.thumb;
+        thumb.loading = "lazy";
+        thumb.referrerPolicy = "no-referrer";
+        card.appendChild(thumb);
+
+        const badge = document.createElement("div");
+        badge.className = "badge-play";
+        badge.innerHTML = "&#9658;"; // play triangle
+        card.appendChild(badge);
+
+        card.dataset.fileType = "video";
+        card.dataset.fileSrc = file.preview; // preview url for modal
       }
 
       const topPct = Math.random() * 60 + 20;
@@ -153,19 +179,11 @@
       card.style.left = `${leftPct}%`;
       card.style.transform = `rotate(${rotateDeg}deg)`;
       card.dataset.baseRotate = String(rotateDeg);
-      card.dataset.baseTop = String(topPct);
-      card.dataset.baseLeft = String(leftPct);
 
-      // Store file data for modal
-      card.dataset.fileType = file.type;
-      card.dataset.fileSrc = file.src;
-
-      // Click opens modal (both image and video)
       card.addEventListener("click", (e) => {
-        if (mode === "stack") return; // click is handled on release in stack mode
+        if (mode === "stack") return;
         e.preventDefault();
-        e.stopPropagation();
-        openModal({ type: file.type, src: file.src });
+        openCard(card);
       });
 
       deck.appendChild(card);
@@ -173,7 +191,7 @@
     });
   }
 
-  // --- STACK MODE LAYOUT ---
+  // ---------- Stack layout ----------
   function layoutStack() {
     const deckRect = deck.getBoundingClientRect();
     const centerX = stackCenterX - deckRect.left;
@@ -185,7 +203,7 @@
       const midX = rect.left - deckRect.left + rect.width / 2;
       const midY = rect.top - deckRect.top + rect.height / 2;
 
-      const offset = i - stackIndex; // float; 0 means focused
+      const offset = i - stackIndex;
       const spreadX = STACK_SPACING_X * offset;
       const spreadY = STACK_SPACING_Y * offset;
 
@@ -193,10 +211,9 @@
       const dy = centerY - midY + spreadY;
 
       const scale = i === Math.round(stackIndex) ? STACK_SCALE_FOCUS : 1.0;
-      const rotate = 0;
 
       card.style.zIndex = String(1000 - Math.abs(Math.round(offset)));
-      card.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(${scale}) rotate(${rotate}deg)`;
+      card.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(${scale}) rotate(0deg)`;
     }
   }
 
@@ -208,8 +225,118 @@
     }
   }
 
-  // --- POINTER EVENTS (mouse + touch unified) ---
+  function findNearestCardIndex(clientX, clientY) {
+    let nearest = 0;
+    let best = Infinity;
+    cards.forEach((c, i) => {
+      const r = c.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const d = Math.hypot(cx - clientX, cy - clientY);
+      if (d < best) { best = d; nearest = i; }
+    });
+    return nearest;
+  }
+
+  // ---------- Open card ----------
+  function openCard(card) {
+    openModal({ type: card.dataset.fileType, src: card.dataset.fileSrc });
+  }
+
+  // ---------- Touch: long-press stack mode ----------
+  deck.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1) return;
+    e.preventDefault();
+
+    touchActive = true;
+    longPressTriggered = false;
+
+    const t = e.touches[0];
+    touchStartTime = Date.now();
+    touchStartX = lastTouchX = t.clientX;
+    touchStartY = lastTouchY = t.clientY;
+
+    clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(() => {
+      const moved = Math.hypot(lastTouchX - touchStartX, lastTouchY - touchStartY);
+      if (touchActive && moved <= TAP_MOVE_TOLERANCE) {
+        mode = "stack";
+        longPressTriggered = true;
+        stackCenterX = lastTouchX;
+        stackCenterY = lastTouchY;
+        stackIndex = findNearestCardIndex(lastTouchX, lastTouchY);
+        layoutStack();
+      }
+    }, LONG_PRESS_MS);
+  }, { passive: false });
+
+  deck.addEventListener("touchmove", (e) => {
+    if (!touchActive || e.touches.length !== 1) return;
+    e.preventDefault();
+
+    const t = e.touches[0];
+    const dx = t.clientX - lastTouchX;
+    const dy = t.clientY - lastTouchY;
+
+    lastTouchX = t.clientX;
+    lastTouchY = t.clientY;
+
+    if (!longPressTriggered) {
+      const moved = Math.hypot(lastTouchX - touchStartX, lastTouchY - touchStartY);
+      if (moved > TAP_MOVE_TOLERANCE) clearTimeout(longPressTimer);
+      return;
+    }
+
+    if (mode === "stack") {
+      stackCenterX += dx;
+      stackCenterY += dy;
+      stackIndex -= dy / STACK_SPACING_Y;
+      stackIndex = Math.max(0, Math.min(cards.length - 1, stackIndex));
+      layoutStack();
+    }
+  }, { passive: false });
+
+  deck.addEventListener("touchend", (e) => {
+    if (!touchActive) return;
+    e.preventDefault();
+
+    touchActive = false;
+    clearTimeout(longPressTimer);
+
+    const duration = Date.now() - touchStartTime;
+    const moved = Math.hypot(lastTouchX - touchStartX, lastTouchY - touchStartY);
+
+    if (!longPressTriggered) {
+      if (duration <= TAP_MAX_DURATION_MS && moved <= TAP_MOVE_TOLERANCE) {
+        const i = findNearestCardIndex(touchStartX, touchStartY);
+        const card = cards[i];
+        if (card) openCard(card);
+      }
+      return;
+    }
+
+    // In stack mode: snap and open focused
+    const focus = Math.round(stackIndex);
+    const card = cards[focus];
+    if (card) openCard(card);
+    mode = "free";
+    resetToFreeLayout();
+  }, { passive: false });
+
+  deck.addEventListener("touchcancel", (e) => {
+    if (!touchActive) return;
+    e.preventDefault();
+    touchActive = false;
+    clearTimeout(longPressTimer);
+    if (longPressTriggered) {
+      mode = "free";
+      resetToFreeLayout();
+    }
+  }, { passive: false });
+
+  // ---------- Mouse (desktop) stack mode via pointer ----------
   deck.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "touch") return;
     pointerActive = true;
     mode = "stack";
     deck.setPointerCapture(e.pointerId);
@@ -218,45 +345,35 @@
     lastPointerY = e.clientY;
     stackCenterX = e.clientX;
     stackCenterY = e.clientY;
-
-    // pick nearest card to pointer as starting focus
-    const nearestIndex = findNearestCardIndex(e.clientX, e.clientY);
-    stackIndex = nearestIndex;
-    stackBaseIndex = nearestIndex;
+    stackIndex = findNearestCardIndex(e.clientX, e.clientY);
 
     layoutStack();
-  }, { passive: false });
+  });
 
   deck.addEventListener("pointermove", (e) => {
-    if (!pointerActive || mode !== "stack") return;
+    if (!pointerActive || mode !== "stack" || e.pointerType === "touch") return;
 
     const dx = e.clientX - lastPointerX;
     const dy = e.clientY - lastPointerY;
 
-    // move stack center with pointer
     stackCenterX += dx;
     stackCenterY += dy;
-
-    // vertical movement changes focused index
-    stackIndex -= dy / STACK_SPACING_Y; // dragging up (negative dy) moves to next cards
+    stackIndex -= dy / STACK_SPACING_Y;
     stackIndex = Math.max(0, Math.min(cards.length - 1, stackIndex));
 
     lastPointerX = e.clientX;
     lastPointerY = e.clientY;
 
     layoutStack();
-  }, { passive: false });
+  });
 
   deck.addEventListener("pointerup", () => {
     if (!pointerActive) return;
     pointerActive = false;
 
-    // Snap to nearest and open
     const focus = Math.round(stackIndex);
     const card = cards[focus];
-    if (card) {
-      openModal({ type: card.dataset.fileType, src: card.dataset.fileSrc });
-    }
+    if (card) openCard(card);
 
     mode = "free";
     resetToFreeLayout();
@@ -269,24 +386,7 @@
     resetToFreeLayout();
   });
 
-  function findNearestCardIndex(clientX, clientY) {
-    const deckRect = deck.getBoundingClientRect();
-    let nearest = 0;
-    let best = Infinity;
-    cards.forEach((c, i) => {
-      const r = c.getBoundingClientRect();
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
-      const d = Math.hypot(cx - clientX, cy - clientY);
-      if (d < best) {
-        best = d;
-        nearest = i;
-      }
-    });
-    return nearest;
-  }
-
-  // --- PARALLAX when not in stack mode ---
+  // ---------- Parallax while free ----------
   let mouseX = 0, mouseY = 0;
   let targetX = 0, targetY = 0;
 
@@ -310,7 +410,7 @@
   }
   animateParallax();
 
-  // --- modal ---
+  // ---------- Modal ----------
   function openModal(file) {
     if (!modal || !modalContent) return;
 
@@ -323,11 +423,12 @@
       modalContent.appendChild(img);
     } else if (file.type === "video") {
       const iframe = document.createElement("iframe");
-      // Ensure autoplay in modal as well
-      iframe.src = file.src.includes("autoplay=1")
-        ? file.src
-        : `${file.src}${file.src.includes("?") ? "&" : "?"}autoplay=1&mute=1`;
+      // Ensure autoplay in modal
+      const src = file.src.includes("autoplay=1") ? file.src :
+        `${file.src}${file.src.includes("?") ? "&" : "?"}autoplay=1&mute=1`;
+      iframe.src = src;
       iframe.allow = "autoplay; encrypted-media";
+      iframe.referrerPolicy = "no-referrer";
       iframe.allowFullscreen = true;
       iframe.frameBorder = "0";
       iframe.style.width = "100%";
@@ -348,6 +449,6 @@
 
   window.closeModal = closeModal;
 
-  // init
+  // Init
   createDeck();
 })();
