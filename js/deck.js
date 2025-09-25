@@ -14,18 +14,15 @@
     return null;
   }
 
-  // Image for <img> (fast, reliable)
   function driveImageSrc(fileId, maxWidth = 2000) {
     return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${maxWidth}`;
   }
 
-  // Video preview for modal (<iframe>)
   function driveVideoPreviewSrc(fileId, { autoplay = false } = {}) {
     const base = `https://drive.google.com/file/d/${fileId}/preview`;
     return autoplay ? `${base}?autoplay=1&mute=1` : base;
   }
 
-  // Use thumbnail also for video card (prevents spinner)
   function driveVideoThumbSrc(fileId, maxWidth = 2000) {
     return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${maxWidth}`;
   }
@@ -104,6 +101,19 @@
   let cards = [];
   let mode = "free"; // "free" | "stack"
 
+  // Stack parameters
+  const STACK_SPACING_Y = 90;
+  const STACK_SPACING_X = 22;
+  const STACK_SCALE_FOCUS = 1.12;
+
+  // Faster vertical scrolling through stack
+  const STACK_SCROLL_SPEED = 2.4; // increase for faster (try 2.0–3.0)
+
+  // Long-press / tap detection
+  const LONG_PRESS_MS = 400;
+  const TAP_MAX_DURATION_MS = 250;
+  const TAP_MOVE_TOLERANCE = 10;
+
   // Stack state
   let pointerActive = false;
   let stackCenterX = 0;
@@ -112,15 +122,7 @@
   let lastPointerX = 0;
   let lastPointerY = 0;
 
-  const STACK_SPACING_Y = 90;  // increase spread
-  const STACK_SPACING_X = 22;
-  const STACK_SCALE_FOCUS = 1.12;
-
-  // Long-press tap detection
-  const LONG_PRESS_MS = 400;
-  const TAP_MAX_DURATION_MS = 250;
-  const TAP_MOVE_TOLERANCE = 10;
-
+  // Touch state
   let touchActive = false;
   let touchStartTime = 0;
   let touchStartX = 0;
@@ -155,7 +157,6 @@
         card.dataset.fileType = "image";
         card.dataset.fileSrc = file.src;
       } else if (file.type === "video") {
-        // Show fast thumbnail with play badge; modal will load autoplaying preview iframe
         const thumb = document.createElement("img");
         thumb.src = file.thumb;
         thumb.loading = "lazy";
@@ -164,11 +165,11 @@
 
         const badge = document.createElement("div");
         badge.className = "badge-play";
-        badge.innerHTML = "&#9658;"; // play triangle
+        badge.innerHTML = "&#9658;";
         card.appendChild(badge);
 
         card.dataset.fileType = "video";
-        card.dataset.fileSrc = file.preview; // preview url for modal
+        card.dataset.fileSrc = file.preview;
       }
 
       const topPct = Math.random() * 60 + 20;
@@ -238,7 +239,6 @@
     return nearest;
   }
 
-  // ---------- Open card ----------
   function openCard(card) {
     openModal({ type: card.dataset.fileType, src: card.dataset.fileSrc });
   }
@@ -290,7 +290,7 @@
     if (mode === "stack") {
       stackCenterX += dx;
       stackCenterY += dy;
-      stackIndex -= dy / (STACK_SPACING_Y * 0.1); // 3x faster scrolling
+      stackIndex -= (dy / STACK_SPACING_Y) * STACK_SCROLL_SPEED;
       stackIndex = Math.max(0, Math.min(cards.length - 1, stackIndex));
       layoutStack();
     }
@@ -315,7 +315,6 @@
       return;
     }
 
-    // In stack mode: snap and open focused
     const focus = Math.round(stackIndex);
     const card = cards[focus];
     if (card) openCard(card);
@@ -334,7 +333,7 @@
     }
   }, { passive: false });
 
-  // ---------- Mouse (desktop) stack mode via pointer ----------
+  // ---------- Mouse (desktop) stack mode ----------
   deck.addEventListener("pointerdown", (e) => {
     if (e.pointerType === "touch") return;
     pointerActive = true;
@@ -358,7 +357,7 @@
 
     stackCenterX += dx;
     stackCenterY += dy;
-    stackIndex -= dy / (STACK_SPACING_Y * 0.3); // 3x faster scrolling
+    stackIndex -= (dy / STACK_SPACING_Y) * STACK_SCROLL_SPEED;
     stackIndex = Math.max(0, Math.min(cards.length - 1, stackIndex));
 
     lastPointerX = e.clientX;
@@ -423,7 +422,6 @@
       modalContent.appendChild(img);
     } else if (file.type === "video") {
       const iframe = document.createElement("iframe");
-      // Ensure autoplay in modal
       const src = file.src.includes("autoplay=1") ? file.src :
         `${file.src}${file.src.includes("?") ? "&" : "?"}autoplay=1&mute=1`;
       iframe.src = src;
