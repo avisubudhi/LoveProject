@@ -91,6 +91,8 @@
   const modalContent = document.getElementById("modal-content");
 
   let cards = [];
+  let isSpreading = false;
+  let hoveredCard = null;
 
   // --- create scattered deck ---
   function createDeck() {
@@ -105,9 +107,10 @@
       return;
     }
 
-    files.forEach((file) => {
+    files.forEach((file, index) => {
       const card = document.createElement("div");
       card.className = "card";
+      card.dataset.index = index;
 
       if (file.type === "image") {
         const img = document.createElement("img");
@@ -135,17 +138,127 @@
       card.style.left = `${leftPct}%`;
       card.style.transform = `rotate(${rotateDeg}deg)`;
       card.dataset.baseRotate = String(rotateDeg);
+      card.dataset.baseTop = String(topPct);
+      card.dataset.baseLeft = String(leftPct);
 
-      card.addEventListener("click", () => openModal(file));
+      // Store file data for modal
+      card.dataset.fileType = file.type;
+      card.dataset.fileSrc = file.src;
+
+      // Add hover/touch interactions
+      card.addEventListener("mouseenter", () => handleCardHover(card, true));
+      card.addEventListener("mouseleave", () => handleCardHover(card, false));
+      card.addEventListener("touchstart", (e) => handleCardTouch(card, e), { passive: true });
+      card.addEventListener("click", (e) => handleCardClick(card, e));
 
       deck.appendChild(card);
       cards.push(card);
     });
   }
 
+  // --- handle card hover/touch ---
+  function handleCardHover(card, isEntering) {
+    if (isEntering) {
+      hoveredCard = card;
+      spreadCards(card);
+    } else {
+      hoveredCard = null;
+      resetCards();
+    }
+  }
+
+  function handleCardTouch(card, e) {
+    e.preventDefault();
+    if (hoveredCard === card) {
+      hoveredCard = null;
+      resetCards();
+    } else {
+      hoveredCard = card;
+      spreadCards(card);
+    }
+  }
+
+  function handleCardClick(card, e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const fileType = card.dataset.fileType;
+    const fileSrc = card.dataset.fileSrc;
+    
+    if (fileType === "video") {
+      // Auto-open videos in modal
+      openModal({ type: fileType, src: fileSrc });
+    } else {
+      // Regular click for images
+      openModal({ type: fileType, src: fileSrc });
+    }
+  }
+
+  // --- spread cards to reveal hidden ones ---
+  function spreadCards(centerCard) {
+    if (isSpreading) return;
+    isSpreading = true;
+
+    const centerIndex = parseInt(centerCard.dataset.index);
+    const centerRect = centerCard.getBoundingClientRect();
+    const centerX = centerRect.left + centerRect.width / 2;
+    const centerY = centerRect.top + centerRect.height / 2;
+
+    cards.forEach((card, index) => {
+      if (card === centerCard) {
+        // Bring hovered card to front
+        card.style.zIndex = "100";
+        card.style.transform += " scale(1.1)";
+        return;
+      }
+
+      const cardRect = card.getBoundingClientRect();
+      const cardX = cardRect.left + cardRect.width / 2;
+      const cardY = cardRect.top + cardRect.height / 2;
+
+      // Calculate distance from center
+      const dx = cardX - centerX;
+      const dy = cardY - centerY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // Spread cards based on distance
+      const spreadFactor = Math.min(distance / 200, 2); // Max 2x spread
+      const angle = Math.atan2(dy, dx);
+      
+      const spreadX = Math.cos(angle) * spreadFactor * 50;
+      const spreadY = Math.sin(angle) * spreadFactor * 50;
+
+      const baseRotate = parseFloat(card.dataset.baseRotate || "0");
+      const baseTop = parseFloat(card.dataset.baseTop || "50");
+      const baseLeft = parseFloat(card.dataset.baseLeft || "50");
+
+      card.style.top = `${baseTop + spreadY / 10}%`;
+      card.style.left = `${baseLeft + spreadX / 10}%`;
+      card.style.transform = `translate(${spreadX}px, ${spreadY}px) rotate(${baseRotate + spreadFactor * 10}deg)`;
+      card.style.zIndex = "10";
+    });
+  }
+
+  // --- reset cards to original positions ---
+  function resetCards() {
+    if (!isSpreading) return;
+    isSpreading = false;
+
+    cards.forEach((card) => {
+      const baseRotate = parseFloat(card.dataset.baseRotate || "0");
+      const baseTop = parseFloat(card.dataset.baseTop || "50");
+      const baseLeft = parseFloat(card.dataset.baseLeft || "50");
+
+      card.style.top = `${baseTop}%`;
+      card.style.left = `${baseLeft}%`;
+      card.style.transform = `rotate(${baseRotate}deg)`;
+      card.style.zIndex = "1";
+    });
+  }
+
   // --- parallax follow mouse ---
   document.addEventListener("mousemove", (e) => {
-    if (!cards.length) return;
+    if (!cards.length || isSpreading) return;
     const x = (e.clientX / window.innerWidth - 0.5) * 40;
     const y = (e.clientY / window.innerHeight - 0.5) * 40;
 
