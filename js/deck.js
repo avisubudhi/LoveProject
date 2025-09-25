@@ -423,8 +423,9 @@
       modalContent.appendChild(img);
     } else if (file.type === "video") {
       const iframe = document.createElement("iframe");
+      // Remove controls and autoplay
       const src = file.src.includes("autoplay=1") ? file.src :
-        `${file.src}${file.src.includes("?") ? "&" : "?"}autoplay=1&mute=1`;
+        `${file.src}${file.src.includes("?") ? "&" : "?"}autoplay=1&mute=1&controls=0`;
       iframe.src = src;
       iframe.allow = "autoplay; encrypted-media";
       iframe.referrerPolicy = "no-referrer";
@@ -432,6 +433,7 @@
       iframe.frameBorder = "0";
       iframe.style.width = "100%";
       iframe.style.height = "70vh";
+      iframe.style.pointerEvents = "none"; // Disable all interactions
       modalContent.appendChild(iframe);
     }
 
