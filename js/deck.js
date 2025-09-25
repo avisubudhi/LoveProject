@@ -1,34 +1,48 @@
-// --- helpers ---
+// ===== Deck of Memories (Drive-safe) =====
+
+// --- utility: shuffle ---
+function shuffle(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
+}
+
+// --- utility: extract Google Drive file id ---
 function extractDriveId(input) {
   if (!input) return null;
-  // Handle full share links like https://drive.google.com/file/d/ID/view?...
-  const match = input.match(/\/d\/([^/]+)/);
+
+  // Standard /file/d/{id}/view
+  const match = String(input).match(/\/d\/([^/]+)(?:\/|$)/);
   if (match && match[1]) return match[1];
 
-  // If a raw ID was provided already
-  if (/^[A-Za-z0-9_-]+$/.test(input)) return input;
+  // ?id={id}
+  try {
+    const u = new URL(String(input), window.location.href);
+    const id = u.searchParams.get("id");
+    if (id) return id;
+  } catch (e) {}
 
-  // Sometimes uc?export or other formats
-  const url = new URL(input, window.location.href);
-  const id = url.searchParams.get("id");
-  if (id) return id;
+  // Raw id
+  if (/^[A-Za-z0-9_-]{10,}$/.test(String(input))) return String(input);
 
   return null;
 }
 
+// --- build Drive-safe URLs ---
 function driveImageSrc(fileId, maxWidth = 2000) {
-  // Thumbnail endpoint is the most reliable for <img>
+  // thumbnail is reliable for <img>
   return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${maxWidth}`;
-  // Alternative (often works too):
-  // return `https://drive.google.com/uc?export=view&id=${fileId}`;
+  // alternative: return `https://drive.google.com/uc?export=view&id=${fileId}`;
 }
 
 function driveVideoPreviewSrc(fileId) {
-  // Must be used in <iframe>, not <video>
+  // must be used in <iframe>, not <video>
   return `https://drive.google.com/file/d/${fileId}/preview`;
 }
 
-// If you keep your original arrays of share links:
+// --- your links (share links are OK) ---
 const imageShareLinks = [
   "https://drive.google.com/file/d/1_h1CQii6k7s2ZJkyb0muXryNaubJg6lJ/view?usp=sharing",
   "https://drive.google.com/file/d/1VpG8z5Bp6bZxQvgaJ44AeV9QI4hviGrl/view?usp=drive_link",
@@ -71,51 +85,130 @@ const videoShareLinks = [
   "https://drive.google.com/file/d/1OVAvBaegL_0a18ubpakv37sSsTPdudXM/view?usp=drive_link"
 ];
 
-// Build normalized files array
+// --- normalize into files[] ---
 function buildFiles() {
   const items = [];
 
-  imageShareLinks.forEach(link => {
+  imageShareLinks.forEach((link) => {
     const id = extractDriveId(link);
-    if (id) {
-      items.push({ type: "image", src: driveImageSrc(id) });
-    }
+    if (id) items.push({ type: "image", src: driveImageSrc(id) });
   });
 
-  videoShareLinks.forEach(link => {
+  videoShareLinks.forEach((link) => {
     const id = extractDriveId(link);
-    if (id) {
-      items.push({ type: "video", src: driveVideoPreviewSrc(id) });
-    }
+    if (id) items.push({ type: "video", src: driveVideoPreviewSrc(id) });
   });
 
   return shuffle(items);
 }
 
-// --- use the normalized files to render cards ---
-const files = buildFiles();
-const container = document.querySelector(".deck");
-files.forEach(file => {
-  const card = document.createElement("div");
-  card.className = "card";
+// --- DOM refs ---
+const deck = document.getElementById("deck") || document.querySelector(".deck");
+const modal = document.getElementById("modal");
+const modalContent = document.getElementById("modal-content");
+
+let cards = [];
+
+// --- create scattered deck ---
+function createDeck() {
+  const files = buildFiles();
+  console.log("Built files:", files.length);
+
+  if (!files.length) {
+    const msg = document.createElement("div");
+    msg.style.color = "#fff";
+    msg.textContent = "No items resolved. Check Drive sharing and links.";
+    deck.appendChild(msg);
+    return;
+  }
+
+  files.forEach((file) => {
+    const card = document.createElement("div");
+    card.className = "card";
+
+    if (file.type === "image") {
+      const img = document.createElement("img");
+      img.src = file.src;
+      img.loading = "lazy";
+      img.referrerPolicy = "no-referrer";
+      img.onerror = () => console.warn("Image failed:", img.src);
+      card.appendChild(img);
+    } else if (file.type === "video") {
+      // Drive preview must be in an iframe
+      const iframe = document.createElement("iframe");
+      iframe.src = file.src;
+      iframe.allow = "autoplay; encrypted-media";
+      iframe.allowFullscreen = true;
+      iframe.frameBorder = "0";
+      iframe.style.width = "100%";
+      iframe.style.height = "100%";
+      card.appendChild(iframe);
+    }
+
+    // random scatter
+    const topPct = Math.random() * 60 + 20;   // 20% - 80%
+    const leftPct = Math.random() * 60 + 20;  // 20% - 80%
+    const rotateDeg = (Math.random() - 0.5) * 30;
+
+    card.style.top = `${topPct}%`;
+    card.style.left = `${leftPct}%`;
+    card.style.transform = `rotate(${rotateDeg}deg)`;
+    card.dataset.baseRotate = String(rotateDeg);
+
+    card.addEventListener("click", () => openModal(file));
+
+    deck.appendChild(card);
+    cards.push(card);
+  });
+}
+
+// --- parallax follow mouse ---
+document.addEventListener("mousemove", (e) => {
+  if (!cards.length) return;
+  const x = (e.clientX / window.innerWidth - 0.5) * 40;
+  const y = (e.clientY / window.innerHeight - 0.5) * 40;
+
+  cards.forEach((card) => {
+    const base = parseFloat(card.dataset.baseRotate || "0");
+    card.style.transform = `translate(${x}px, ${y}px) rotate(${base}deg)`;
+  });
+});
+
+// --- modal ---
+function openModal(file) {
+  if (!modal || !modalContent) return;
+
+  modalContent.innerHTML = "";
 
   if (file.type === "image") {
     const img = document.createElement("img");
     img.src = file.src;
-    img.loading = "lazy";
     img.referrerPolicy = "no-referrer";
-    card.appendChild(img);
+    modalContent.appendChild(img);
   } else if (file.type === "video") {
-    // Use Drive preview in an iframe
     const iframe = document.createElement("iframe");
     iframe.src = file.src;
     iframe.allow = "autoplay; encrypted-media";
     iframe.allowFullscreen = true;
     iframe.frameBorder = "0";
     iframe.style.width = "100%";
-    iframe.style.height = "100%";
-    card.appendChild(iframe);
+    iframe.style.height = "70vh";
+    modalContent.appendChild(iframe);
   }
 
-  container.appendChild(card);
-});
+  modal.style.display = "flex";
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function closeModal() {
+  if (!modal || !modalContent) return;
+  modal.style.display = "none";
+  modal.setAttribute("aria-hidden", "true");
+  modalContent.innerHTML = "";
+}
+
+// expose for HTML inline handlers
+window.closeModal = closeModal;
+
+// init
+createDeck();
