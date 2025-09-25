@@ -16,6 +16,10 @@ body {
   width: 90%;
   height: 90%;
   perspective: 1500px;
+  /* Force center alignment */
+  margin: 0 auto;
+  left: 0;
+  right: 0;
 }
 
 .card {
@@ -116,6 +120,11 @@ body {
   background: #000;
   display: block;
   box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+}
+
+/* Hide video controls in modal */
+.modal-content iframe {
+  pointer-events: none;
 }
 
 .close {
