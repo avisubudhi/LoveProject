@@ -2,17 +2,18 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Parallax Media Deck</title>
-  <link rel="stylesheet" href="css/deck.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deck Gallery</title>
+  <link rel="stylesheet" href="css/deck.css">
 </head>
 <body>
-  <div class="deck"></div>
+  <div id="deck"></div>
 
-  <!-- Background music -->
-  <audio id="bg-music" autoplay loop>
-    <source src="https://www.bensound.com/bensound-music/bensound-sunny.mp3" type="audio/mpeg">
-  </audio>
+  <!-- Fullscreen modal -->
+  <div id="modal" class="modal">
+    <span id="closeModal">&times;</span>
+    <div id="modalContent"></div>
+  </div>
 
   <script src="js/deck.js"></script>
 </body>
