@@ -30,3 +30,36 @@
   </script>
 </body>
 </html> -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Deck of Memories</title>
+  <link rel="stylesheet" href="css/deck.css">
+</head>
+<body>
+  <div class="deck" id="deck"></div>
+
+  <div class="modal" id="modal" aria-hidden="true" role="dialog">
+    <button class="close" id="modal-close" aria-label="Close">&times;</button>
+    <div class="modal-content" id="modal-content"></div>
+  </div>
+
+  <script src="js/deck.js"></script>
+  <script>
+    (function () {
+      const modal = document.getElementById("modal");
+      const closeBtn = document.getElementById("modal-close");
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) window.closeModal && window.closeModal();
+      });
+      closeBtn.addEventListener("click", () => window.closeModal && window.closeModal());
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") window.closeModal && window.closeModal();
+      });
+    })();
+  </script>
+</body>
+</html>
